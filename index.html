@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Plan de Visitas a Clientes – Entelgy</title>
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+  <style>
+    :root{ --bg:#ffffff; --panel:#f8fafc; --muted:#6b7280; --text:#0b1e2e; --accent:#2563eb; --accent-2:#06b6d4; --danger:#ef4444; --border:#e5e7eb }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif}
+    .container{max-width:1200px;margin:24px auto;padding:0 16px}
+    header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .brand{display:flex;align-items:center;gap:14px}
+    .brand img{height:40px}
+    .subtitle{font-size:12px;color:#334155}
+    .toolbar{display:flex;flex-wrap:wrap;gap:8px}
+    button,select,input,textarea{border:1px solid var(--border);border-radius:10px;background:#fff;color:var(--text)}
+    button{padding:10px 12px;cursor:pointer}
+    .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+    .btn-secondary{background:var(--accent-2);color:#fff;border-color:var(--accent-2)}
+    .btn-ghost{background:#fff}
+    .btn-danger{background:var(--danger);color:#fff;border-color:var(--danger)}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:16px}
+    .filters{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
+    .filters .field{min-width:220px}
+    table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left}
+    th{background:#f1f5f9}
+    .badge{padding:4px 8px;border-radius:999px;font-size:12px;font-weight:600;display:inline-block;border:1px solid transparent}
+    .status-Pendiente{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+    .status-Confirmado{background:#ecfeff;color:#0e7490;border-color:#a5f3fc}
+    .status-Reprogramado{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+    .status-Cancelado{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+    #calendar{background:#fff;border:1px solid var(--border);border-radius:16px;padding:10px}
+    /* Modal */
+    dialog{border:none;border-radius:14px;max-width:720px;width:96%;padding:0}
+    .modal{padding:16px}
+    .modal header{display:flex;justify-content:space-between;align-items:center;margin:0 0 8px}
+    .grid{display:grid;gap:10px}
+    .grid-2{grid-template-columns:1fr 1fr}
+    @media (max-width:720px){.grid-2{grid-template-columns:1fr}}
+    label{font-size:12px;color:#334155;display:block;margin-bottom:6px}
+    input,select,textarea{width:100%;padding:10px;border-radius:8px}
+    .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <img alt="Entelgy" src="Logo-Entelgy.png"/>
+        <div>
+          <h1>Plan de Visitas a Clientes</h1>
+          <div class="subtitle">Entelgy · Human driven technology · Colombia</div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button id="btnNew" class="btn-secondary">➕ Nueva visita</button>
+        <button id="btnExport" class="btn-primary">⬇️ Exportar CSV</button>
+        <button id="btnImport" class="btn-ghost">⬆️ Importar CSV</button>
+        <input type="file" id="fileInput" accept=".csv" style="display:none" />
+        <button id="btnPrint" class="btn-ghost">🖨️ Imprimir</button>
+        <button id="btnClearAll" class="btn-danger">🗑️ Borrar todo</button>
+      </div>
+    </header>
+
+    <!-- Filtros -->
+    <section class="card">
+      <div class="filters">
+        <div class="field">
+          <label for="filterPM">Filtrar por PM Responsable</label>
+          <select id="filterPM">
+            <option value="">Todos</option>
+            <option value="luisa.bello@entelgy.com">Luisa Fernanda Bello Vargas</option>
+            <option value="mariaf.llanes@entelgy.com">Maria Fernanda Llanes Ferreira</option>
+            <option value="carolina.torres@entelgy.com">Carolina Torres Jimenez</option>
+            <option value="eduar.hernandez@entelgy.com">Eduar Yovani Hernandez Ruiz</option>
+            <option value="sarith.penuela@entelgy.com">Sarith Mayerly Peñuela Morales</option>
+            <option value="john.lamus@entelgy.com">John David Lamus Cardona</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="filterEstado">Estado</label>
+          <select id="filterEstado">
+            <option value="">Todos</option>
+            <option>Pendiente</option>
+            <option>Confirmado</option>
+            <option>Reprogramado</option>
+            <option>Cancelado</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="filterDesde">Desde</label>
+          <input id="filterDesde" type="date" />
+        </div>
+        <div class="field">
+          <label for="filterHasta">Hasta</label>
+          <input id="filterHasta" type="date" />
+        </div>
+        <div class="field">
+          <button id="btnApplyFilters" class="btn-secondary">Aplicar filtros</button>
+        </div>
+        <div class="field">
+          <button id="btnClearFilters" class="btn-ghost">Limpiar</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Calendario de Visitas</h2>
+      <div id="calendar"></div>
+    </section>
+
+    <section class="card">
+      <h2>Listado de Visitas</h2>
+      <table id="visitsTable">
+        <thead>
+          <tr>
+            <th>Cliente</th><th>Fecha</th><th>Hora</th><th>Objetivo</th><th>PM Responsable</th><th>Estado</th>
+          </tr>
+        </thead>
+        <tbody id="visitsBody"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <!-- Modal Nueva/Editar visita -->
+  <dialog id="visitDialog">
+    <form id="visitForm" method="dialog" class="modal">
+      <header>
+        <strong id="dlgTitle">Nueva visita</strong>
+        <button type="button" id="dlgClose" class="btn-ghost">✖</button>
+      </header>
+      <div class="grid grid-2">
+        <div>
+          <label for="cliente">Cliente *</label>
+          <input id="cliente" required placeholder="Ej. Davivienda" />
+        </div>
+        <div>
+          <label for="objetivo">Objetivo</label>
+          <input id="objetivo" placeholder="Demo, seguimiento…" />
+        </div>
+        <div>
+          <label for="fecha">Fecha *</label>
+          <input id="fecha" type="date" required />
+        </div>
+        <div>
+          <label for="hora">Hora</label>
+          <input id="hora" type="time" />
+        </div>
+        <div>
+          <label for="estado">Estado</label>
+          <select id="estado">
+            <option>Pendiente</option>
+            <option>Confirmado</option>
+            <option>Reprogramado</option>
+            <option>Cancelado</option>
+          </select>
+        </div>
+        <div>
+          <label for="pm">PM Responsable</label>
+          <select id="pm">
+            <option value="luisa.bello@entelgy.com">Luisa Fernanda Bello Vargas</option>
+            <option value="mariaf.llanes@entelgy.com">Maria Fernanda Llanes Ferreira</option>
+            <option value="carolina.torres@entelgy.com">Carolina Torres Jimenez</option>
+            <option value="eduar.hernandez@entelgy.com">Eduar Yovani Hernandez Ruiz</option>
+            <option value="sarith.penuela@entelgy.com">Sarith Mayerly Peñuela Morales</option>
+            <option value="john.lamus@entelgy.com">John David Lamus Cardona</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn-primary" id="btnSave" value="default">Guardar</button>
+        <button class="btn-ghost" id="btnCancel" value="cancel">Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const STORAGE_KEY = 'plan_visitas_clientes_v1';
+    const visitsBody = document.getElementById('visitsBody');
+    const dlg = document.getElementById('visitDialog');
+    const form = document.getElementById('visitForm');
+    const dlgClose = document.getElementById('dlgClose');
+    const btnNew = document.getElementById('btnNew');
+
+    // Filtros UI
+    const fPM = document.getElementById('filterPM');
+    const fEstado = document.getElementById('filterEstado');
+    const fDesde = document.getElementById('filterDesde');
+    const fHasta = document.getElementById('filterHasta');
+
+    let state = { rows: [], editIndex: null, filters: {pm:'', estado:'', desde:'', hasta:''} };
+    let calendar;
+
+    function restore(){ state.rows = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); }
+    function persist(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.rows)); }
+
+    function applyFiltersFromUI(){
+      state.filters.pm = fPM.value;
+      state.filters.estado = fEstado.value;
+      state.filters.desde = fDesde.value;
+      state.filters.hasta = fHasta.value;
+      renderTable(); rerenderCalendar();
+    }
+
+    function clearFilters(){
+      fPM.value=''; fEstado.value=''; fDesde.value=''; fHasta.value='';
+      applyFiltersFromUI();
+    }
+
+    function getFilteredRows(){
+      const {pm, estado, desde, hasta} = state.filters;
+      return state.rows.filter(r => {
+        let ok = true;
+        if(pm) ok = ok && (r.pmEmail === pm);
+        if(estado) ok = ok && r.estado === estado;
+        if(desde) ok = ok && r.fecha >= desde;
+        if(hasta) ok = ok && r.fecha <= hasta;
+        return ok;
+      }).sort((a,b)=> (a.fecha + (a.hora||'')) > (b.fecha + (b.hora||'')) ? 1 : -1);
+    }
+
+    function renderTable(){
+      const rows = getFilteredRows();
+      visitsBody.innerHTML='';
+      rows.forEach(r => {
+        const tr=document.createElement('tr');
+        tr.innerHTML=`<td>${escape(r.cliente)}</td><td>${r.fecha}</td><td>${r.hora||''}</td><td>${escape(r.objetivo||'')}</td><td>${escape(r.pmName||'')}</td><td><span class="badge status-${r.estado}">${r.estado}</span></td>`;
+        visitsBody.appendChild(tr);
+      });
+    }
+
+    function renderCalendar(){
+      const calendarEl=document.getElementById('calendar');
+      calendar=new FullCalendar.Calendar(calendarEl,{
+        initialView:'dayGridMonth',
+        locale:'es',
+        selectable:true,
+        headerToolbar:{left:'prev,next today',center:'title',right:'dayGridMonth,timeGridWeek,timeGridDay'},
+        dateClick: info => openDialog({fecha:info.dateStr}),
+        eventClick: info => {
+          const e = info.event;
+          const idx = Number(e.extendedProps.index);
+          openDialog(state.rows[idx], idx);
+        },
+        events: []
+      });
+      calendar.render();
+      addEventsFromState();
+    }
+
+    function addEventsFromState(){
+      if(!calendar) return;
+      const rows = getFilteredRows();
+      calendar.removeAllEvents();
+      rows.forEach((r,idx)=>{
+        calendar.addEvent({
+          title: r.cliente + (r.objetivo? ' - '+r.objetivo:'') + (r.pmName? ' ('+r.pmName+')':''),
+          start: r.fecha + (r.hora? 'T'+r.hora:''),
+          allDay: !r.hora,
+          index: idx
+        });
+      });
+    }
+
+    function rerenderCalendar(){ addEventsFromState(); }
+
+    function openDialog(data={}, index=null){
+      state.editIndex = index;
+      document.getElementById('dlgTitle').textContent = index==null ? 'Nueva visita' : 'Editar visita';
+      document.getElementById('cliente').value = data.cliente||'';
+      document.getElementById('objetivo').value = data.objetivo||'';
+      document.getElementById('fecha').value = data.fecha||'';
+      document.getElementById('hora').value = data.hora||'';
+      document.getElementById('estado').value = data.estado||'Pendiente';
+      // PM
+      const pmSel = document.getElementById('pm');
+      if(data.pmEmail){ pmSel.value = data.pmEmail; } else { pmSel.selectedIndex = 0; }
+      dlg.showModal();
+    }
+
+    function closeDialog(){ dlg.close(); form.reset(); state.editIndex=null; }
+
+    // Save handler
+    form.addEventListener('submit', (e)=>{
+      e.preventDefault();
+      const pmSel = document.getElementById('pm');
+      const row = {
+        cliente: document.getElementById('cliente').value.trim(),
+        objetivo: document.getElementById('objetivo').value.trim(),
+        fecha: document.getElementById('fecha').value,
+        hora: document.getElementById('hora').value,
+        estado: document.getElementById('estado').value,
+        pmName: pmSel.options[pmSel.selectedIndex]?.text || '',
+        pmEmail: pmSel.value || ''
+      };
+      if(!row.cliente || !row.fecha){ alert('Completa Cliente y Fecha'); return; }
+      if(state.editIndex==null){ state.rows.push(row); } else { state.rows[state.editIndex]=row; }
+      persist(); renderTable(); rerenderCalendar(); closeDialog();
+    });
+
+    // Toolbar & Filters actions
+    btnNew.addEventListener('click', ()=> openDialog());
+    document.getElementById('btnApplyFilters').addEventListener('click', (e)=>{ e.preventDefault(); applyFiltersFromUI(); });
+    document.getElementById('btnClearFilters').addEventListener('click', (e)=>{ e.preventDefault(); clearFilters(); });
+    dlgClose.addEventListener('click', closeDialog);
+    document.getElementById('btnCancel').addEventListener('click', closeDialog);
+    document.getElementById('btnPrint').addEventListener('click', ()=> window.print());
+    document.getElementById('btnClearAll').addEventListener('click', ()=>{ if(confirm('Eliminar todas las visitas?')){ state.rows=[]; persist(); renderTable(); rerenderCalendar(); }});
+
+    // CSV export/import con PM
+    document.getElementById('btnExport').addEventListener('click', ()=>{
+      if(state.rows.length===0){ alert('No hay datos para exportar.'); return; }
+      const headers=['Cliente','Fecha','Hora','Objetivo','PM','PM_Email','Estado'];
+      const lines=[headers.join(',')].concat(state.rows.map(r=>[r.cliente,r.fecha,r.hora||'',r.objetivo||'',r.pmName||'',r.pmEmail||'',r.estado].map(csvEsc).join(',')));
+      const blob=new Blob(["\uFEFF"+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+      const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='plan_visitas.csv'; a.click(); URL.revokeObjectURL(url);
+    });
+    document.getElementById('btnImport').addEventListener('click', ()=> document.getElementById('fileInput').click());
+    document.getElementById('fileInput').addEventListener('change', (e)=>{
+      const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+      rd.onload=()=>{ try{
+        const rows=parseCSV(rd.result.toString());
+        // Soporta CSV antiguos (sin PM) y nuevos (con PM, PM_Email)
+        state.rows=rows.map(r=>({
+          cliente:r.Cliente, fecha:r.Fecha, hora:r.Hora, objetivo:r.Objetivo,
+          pmName:r.PM||'', pmEmail:r.PM_Email||'', estado:r.Estado||'Pendiente'
+        }));
+        persist(); renderTable(); rerenderCalendar(); e.target.value='';
+      }catch(err){ alert('No se pudo importar el CSV.'); }}; rd.readAsText(f,'utf-8');
+    });
+
+    // Utils
+    function csvEsc(v){ if(v==null) return ''; v=String(v).replaceAll('"','""'); return /[",\n]/.test(v)?`"${v}"`:v; }
+    function parseCSV(text){ const lines=text.split(/\r?\n/).filter(Boolean); const h=lines.shift().split(','); return lines.map(l=>{const vals=l.match(/\"([^\"]*)\"|[^,]+/g).map(s=>s.replace(/^\"|\"$/g,'')); const o={}; h.forEach((k,i)=>o[k]=vals[i]||''); return o;}); }
+    function escape(s){return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;')}
+
+    // Init
+    restore();
+    renderTable();
+    renderCalendar();
+  </script>
+</body>
+</html>
