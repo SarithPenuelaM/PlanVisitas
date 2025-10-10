@@ -4,8 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Plan de Visitas a Clientes – Entelgy</title>
+
+  <!-- FullCalendar -->
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+
+  <!-- Firebase SDK (compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+
   <style>
     :root{ --bg:#ffffff; --panel:#f8fafc; --muted:#6b7280; --text:#0b1e2e; --accent:#2563eb; --accent-2:#06b6d4; --danger:#ef4444; --border:#e5e7eb }
     *{box-sizing:border-box}
@@ -44,16 +52,18 @@
     label{font-size:12px;color:#334155;display:block;margin-bottom:6px}
     input,select,textarea{width:100%;padding:10px;border-radius:8px}
     .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+    .user{font-size:12px;color:#475569}
   </style>
 </head>
 <body>
   <div class="container">
     <header>
       <div class="brand">
-        <img alt="Entelgy" src="Logo-Entelgy.png"/>
+        <img alt="Entelgy" src="https://upload.wikimedia.org/wikipedia/commons/0/0e/Entelgy-logo.png"/>
         <div>
           <h1>Plan de Visitas a Clientes</h1>
           <div class="subtitle">Entelgy · Human driven technology · Colombia</div>
+          <div class="user" id="whoami"></div>
         </div>
       </div>
       <div class="toolbar">
@@ -62,7 +72,8 @@
         <button id="btnImport" class="btn-ghost">⬆️ Importar CSV</button>
         <input type="file" id="fileInput" accept=".csv" style="display:none" />
         <button id="btnPrint" class="btn-ghost">🖨️ Imprimir</button>
-        <button id="btnClearAll" class="btn-danger">🗑️ Borrar todo</button>
+        <button id="btnClearAll" class="btn-danger">🗑️ Borrar filtradas</button>
+        <button id="btnLogout" class="btn-ghost">🚪 Salir</button>
       </div>
     </header>
 
@@ -79,7 +90,6 @@
             <option value="eduar.hernandez@entelgy.com">Eduar Yovani Hernandez Ruiz</option>
             <option value="sarith.penuela@entelgy.com">Sarith Mayerly Peñuela Morales</option>
             <option value="john.lamus@entelgy.com">John David Lamus Cardona</option>
-            <option value="gisela.vela@entelgy.com">Ruth Yisela Vela Leon"</option>
           </select>
         </div>
         <div class="field">
@@ -119,7 +129,7 @@
       <table id="visitsTable">
         <thead>
           <tr>
-            <th>Cliente</th><th>Fecha</th><th>Hora</th><th>Objetivo</th><th>PM Responsable</th><th>Estado</th>
+            <th>Cliente</th><th>Fecha</th><th>Hora</th><th>Objetivo</th><th>PM Responsable</th><th>Estado</th><th>Acciones</th>
           </tr>
         </thead>
         <tbody id="visitsBody"></tbody>
@@ -180,25 +190,77 @@
   </dialog>
 
   <script>
-    const STORAGE_KEY = 'plan_visitas_clientes_v1';
+    // ===== Firebase config (TU PROYECTO REAL) =====
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPO7puOx2HUxIA1_KqguKqEUqw8iBIXzk",
+      authDomain: "plan-visitas-entelgy.firebaseapp.com",
+      projectId: "plan-visitas-entelgy",
+      storageBucket: "plan-visitas-entelgy.firebasestorage.app",
+      messagingSenderId: "316959803381",
+      appId: "1:316959803381:web:77b69b61ead3a6239742bc"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    // ===== App state & refs =====
     const visitsBody = document.getElementById('visitsBody');
     const dlg = document.getElementById('visitDialog');
     const form = document.getElementById('visitForm');
     const dlgClose = document.getElementById('dlgClose');
     const btnNew = document.getElementById('btnNew');
+    const whoami = document.getElementById('whoami');
 
-    // Filtros UI
     const fPM = document.getElementById('filterPM');
     const fEstado = document.getElementById('filterEstado');
     const fDesde = document.getElementById('filterDesde');
     const fHasta = document.getElementById('filterHasta');
 
-    let state = { rows: [], editIndex: null, filters: {pm:'', estado:'', desde:'', hasta:''} };
+    let state = { rows: [], editId: null, filters: {pm:'', estado:'', desde:'', hasta:''} };
     let calendar;
 
-    function restore(){ state.rows = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); }
-    function persist(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.rows)); }
+    // ===== Auth =====
+    auth.onAuthStateChanged(user => {
+      if (!user) {
+        auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+      } else {
+        whoami.textContent = `Conectado como: ${user.email}`;
+        listenVisits();
+      }
+    });
+    document.getElementById('btnLogout').addEventListener('click', () => auth.signOut());
 
+    // ===== Firestore listeners & ops =====
+    function listenVisits(){
+      db.collection('visitas').orderBy('fecha').onSnapshot(snap => {
+        const rows = [];
+        snap.forEach(doc => rows.push({ id: doc.id, ...doc.data() }));
+        state.rows = rows;
+        renderTable();
+        rerenderCalendar();
+      });
+    }
+
+    async function saveVisit(row){
+      const id = state.editId;
+      if (id) {
+        await db.collection('visitas').doc(id).set(row, { merge: true });
+      } else {
+        await db.collection('visitas').add({
+          ...row,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+    }
+
+    async function duplicateVisit(row){
+      const copy = { ...row };
+      delete copy.id; // nuevo documento
+      copy.objetivo = (copy.objetivo? copy.objetivo+' ' : '') + '(dup)';
+      await saveVisit(copy);
+    }
+
+    // ===== Filters =====
     function applyFiltersFromUI(){
       state.filters.pm = fPM.value;
       state.filters.estado = fEstado.value;
@@ -206,11 +268,12 @@
       state.filters.hasta = fHasta.value;
       renderTable(); rerenderCalendar();
     }
-
     function clearFilters(){
       fPM.value=''; fEstado.value=''; fDesde.value=''; fHasta.value='';
       applyFiltersFromUI();
     }
+    document.getElementById('btnApplyFilters').addEventListener('click', (e)=>{ e.preventDefault(); applyFiltersFromUI(); });
+    document.getElementById('btnClearFilters').addEventListener('click', (e)=>{ e.preventDefault(); clearFilters(); });
 
     function getFilteredRows(){
       const {pm, estado, desde, hasta} = state.filters;
@@ -224,68 +287,103 @@
       }).sort((a,b)=> (a.fecha + (a.hora||'')) > (b.fecha + (b.hora||'')) ? 1 : -1);
     }
 
+    // ===== Table render =====
     function renderTable(){
       const rows = getFilteredRows();
       visitsBody.innerHTML='';
       rows.forEach(r => {
         const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escape(r.cliente)}</td><td>${r.fecha}</td><td>${r.hora||''}</td><td>${escape(r.objetivo||'')}</td><td>${escape(r.pmName||'')}</td><td><span class="badge status-${r.estado}">${r.estado}</span></td>`;
+        tr.innerHTML=`<td>${esc(r.cliente)}</td><td>${r.fecha}</td><td>${r.hora||''}</td><td>${esc(r.objetivo||'')}</td><td>${esc(r.pmName||'')}</td><td><span class="badge status-${r.estado}">${r.estado}</span></td><td>
+          <button class="btn-ghost" data-action="edit" data-id="${r.id}">✏️</button>
+          <button class="btn-ghost" data-action="dup" data-id="${r.id}">🧬</button>
+          <button class="btn-danger" data-action="del" data-id="${r.id}">🗑️</button>
+        </td>`;
         visitsBody.appendChild(tr);
+      });
+      // row actions handlers
+      visitsBody.querySelectorAll('button[data-action]').forEach(btn=>{
+        btn.addEventListener('click', async e=>{
+          const id = e.currentTarget.getAttribute('data-id');
+          const act = e.currentTarget.getAttribute('data-action');
+          const row = state.rows.find(x=>x.id===id);
+          if(!row) return;
+          if(act==='edit'){ openDialog(row, id); }
+          if(act==='dup'){ await duplicateVisit(row); }
+          if(act==='del'){
+            if(confirm('¿Eliminar esta visita?')){ await db.collection('visitas').doc(id).delete(); }
+          }
+        })
       });
     }
 
+    // ===== Calendar =====
     function renderCalendar(){
       const calendarEl=document.getElementById('calendar');
       calendar=new FullCalendar.Calendar(calendarEl,{
         initialView:'dayGridMonth',
         locale:'es',
         selectable:true,
+        editable:true,
+        droppable:false,
+        eventDurationEditable:true,
         headerToolbar:{left:'prev,next today',center:'title',right:'dayGridMonth,timeGridWeek,timeGridDay'},
         dateClick: info => openDialog({fecha:info.dateStr}),
         eventClick: info => {
-          const e = info.event;
-          const idx = Number(e.extendedProps.index);
-          openDialog(state.rows[idx], idx);
+          const id = info.event.id;
+          const row = state.rows.find(r => r.id === id);
+          if(row){ openDialog(row, id); }
+        },
+        eventDrop: async info => {
+          const id = info.event.id;
+          const start = info.event.start;                // Date
+          const iso = start.toISOString();
+          const fecha = iso.slice(0,10);
+          const hora = start.getHours().toString().padStart(2,'0')+":"+start.getMinutes().toString().padStart(2,'0');
+          await db.collection('visitas').doc(id).set({ fecha, hora: info.event.allDay ? '' : hora }, { merge:true });
+        },
+        eventResize: async info => {
+          const id = info.event.id;
+          const start = info.event.start;
+          const iso = start.toISOString();
+          const fecha = iso.slice(0,10);
+          const hora = start.getHours().toString().padStart(2,'0')+":"+start.getMinutes().toString().padStart(2,'0');
+          await db.collection('visitas').doc(id).set({ fecha, hora: info.event.allDay ? '' : hora }, { merge:true });
         },
         events: []
       });
       calendar.render();
       addEventsFromState();
     }
-
     function addEventsFromState(){
       if(!calendar) return;
       const rows = getFilteredRows();
       calendar.removeAllEvents();
-      rows.forEach((r,idx)=>{
+      rows.forEach((r)=>{
         calendar.addEvent({
-          title: r.cliente + (r.objetivo? ' - '+r.objetivo:'') + (r.pmName? ' ('+r.pmName+')':''),
-          start: r.fecha + (r.hora? 'T'+r.hora:''),
-          allDay: !r.hora,
-          index: idx
+          title: r.cliente + (r.objetivo? ' - '+r.objetivo:'') + (r.pmName? ' ('+r.pmName+')':''), 
+          start: r.fecha + (r.hora? 'T'+r.hora:''), 
+          allDay: !r.hora, 
+          id: r.id
         });
       });
     }
-
     function rerenderCalendar(){ addEventsFromState(); }
 
-    function openDialog(data={}, index=null){
-      state.editIndex = index;
-      document.getElementById('dlgTitle').textContent = index==null ? 'Nueva visita' : 'Editar visita';
+    // ===== Dialog =====
+    function openDialog(data={}, id=null){
+      state.editId = id || data.id || null;
+      document.getElementById('dlgTitle').textContent = state.editId? 'Editar visita' : 'Nueva visita';
       document.getElementById('cliente').value = data.cliente||'';
       document.getElementById('objetivo').value = data.objetivo||'';
       document.getElementById('fecha').value = data.fecha||'';
       document.getElementById('hora').value = data.hora||'';
       document.getElementById('estado').value = data.estado||'Pendiente';
-      // PM
       const pmSel = document.getElementById('pm');
       if(data.pmEmail){ pmSel.value = data.pmEmail; } else { pmSel.selectedIndex = 0; }
       dlg.showModal();
     }
+    function closeDialog(){ dlg.close(); form.reset(); state.editId=null; }
 
-    function closeDialog(){ dlg.close(); form.reset(); state.editIndex=null; }
-
-    // Save handler
     form.addEventListener('submit', (e)=>{
       e.preventDefault();
       const pmSel = document.getElementById('pm');
@@ -299,20 +397,28 @@
         pmEmail: pmSel.value || ''
       };
       if(!row.cliente || !row.fecha){ alert('Completa Cliente y Fecha'); return; }
-      if(state.editIndex==null){ state.rows.push(row); } else { state.rows[state.editIndex]=row; }
-      persist(); renderTable(); rerenderCalendar(); closeDialog();
+      saveVisit(row).then(()=>{ closeDialog(); }).catch(()=>{ alert('No se pudo guardar en la base'); });
     });
 
-    // Toolbar & Filters actions
+    // ===== Toolbar =====
     btnNew.addEventListener('click', ()=> openDialog());
-    document.getElementById('btnApplyFilters').addEventListener('click', (e)=>{ e.preventDefault(); applyFiltersFromUI(); });
-    document.getElementById('btnClearFilters').addEventListener('click', (e)=>{ e.preventDefault(); clearFilters(); });
     dlgClose.addEventListener('click', closeDialog);
     document.getElementById('btnCancel').addEventListener('click', closeDialog);
     document.getElementById('btnPrint').addEventListener('click', ()=> window.print());
-    document.getElementById('btnClearAll').addEventListener('click', ()=>{ if(confirm('Eliminar todas las visitas?')){ state.rows=[]; persist(); renderTable(); rerenderCalendar(); }});
 
-    // CSV export/import con PM
+    document.getElementById('btnClearAll').addEventListener('click', async ()=>{
+      if(!confirm('Eliminar TODAS las visitas filtradas en la base?')) return;
+      const rows = getFilteredRows();          // solo las que se están viendo
+      const batchSize = 20;
+      for (let i=0;i<rows.length;i+=batchSize){
+        const part = rows.slice(i,i+batchSize);
+        const batch = db.batch();
+        part.forEach(r=> batch.delete(db.collection('visitas').doc(r.id)) );
+        await batch.commit();
+      }
+    });
+
+    // ===== CSV Export/Import =====
     document.getElementById('btnExport').addEventListener('click', ()=>{
       if(state.rows.length===0){ alert('No hay datos para exportar.'); return; }
       const headers=['Cliente','Fecha','Hora','Objetivo','PM','PM_Email','Estado'];
@@ -320,27 +426,41 @@
       const blob=new Blob(["\uFEFF"+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
       const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='plan_visitas.csv'; a.click(); URL.revokeObjectURL(url);
     });
+
     document.getElementById('btnImport').addEventListener('click', ()=> document.getElementById('fileInput').click());
-    document.getElementById('fileInput').addEventListener('change', (e)=>{
+    document.getElementById('fileInput').addEventListener('change', async (e)=>{
       const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
-      rd.onload=()=>{ try{
+      rd.onload=async ()=>{ try{
         const rows=parseCSV(rd.result.toString());
-        // Soporta CSV antiguos (sin PM) y nuevos (con PM, PM_Email)
-        state.rows=rows.map(r=>({
-          cliente:r.Cliente, fecha:r.Fecha, hora:r.Hora, objetivo:r.Objetivo,
-          pmName:r.PM||'', pmEmail:r.PM_Email||'', estado:r.Estado||'Pendiente'
-        }));
-        persist(); renderTable(); rerenderCalendar(); e.target.value='';
+        for(const r of rows){
+          const row = { cliente:r.Cliente, fecha:r.Fecha, hora:r.Hora, objetivo:r.Objetivo, pmName:r.PM||'', pmEmail:r.PM_Email||'', estado:r.Estado||'Pendiente'};
+          await saveVisit(row);
+        }
+        e.target.value='';
       }catch(err){ alert('No se pudo importar el CSV.'); }}; rd.readAsText(f,'utf-8');
     });
 
-    // Utils
+    // ===== Utils =====
     function csvEsc(v){ if(v==null) return ''; v=String(v).replaceAll('"','""'); return /[",\n]/.test(v)?`"${v}"`:v; }
-    function parseCSV(text){ const lines=text.split(/\r?\n/).filter(Boolean); const h=lines.shift().split(','); return lines.map(l=>{const vals=l.match(/\"([^\"]*)\"|[^,]+/g).map(s=>s.replace(/^\"|\"$/g,'')); const o={}; h.forEach((k,i)=>o[k]=vals[i]||''); return o;}); }
-    function escape(s){return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;')}
+    function parseCSV(text){
+      const lines=text.split(/\r?\n/).filter(Boolean);
+      if(!lines.length) return [];
+      const h = splitCSVLine(lines[0]);
+      return lines.slice(1).map(l=>{ const v=splitCSVLine(l); const o={}; h.forEach((k,i)=>o[k]=v[i]||''); return o; });
+    }
+    function splitCSVLine(line){
+      const out=[]; let cur=''; let inQ=false;
+      for(let i=0;i<line.length;i++){
+        const ch=line[i];
+        if(ch=='"'){ if(inQ && line[i+1]=='"'){cur+='"'; i++;} else inQ=!inQ; }
+        else if(ch===',' && !inQ){ out.push(cur); cur=''; }
+        else cur+=ch;
+      }
+      out.push(cur); return out;
+    }
+    function esc(s){return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#39;")}
 
-    // Init
-    restore();
+    // ===== Init =====
     renderTable();
     renderCalendar();
   </script>
