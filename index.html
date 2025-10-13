@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Plan de Visitas a Clientes – Entelgy (con BD gratuita)</title>
+  <title>Plan de Visitas – Versión con Base de Datos Gratuita (Supabase)</title>
   <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
-  <!-- Supabase JS v2 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
-    :root{ --bg:#ffffff; --panel:#f8fafc; --muted:#6b7280; --text:#0b1e2e; --accent:#2563eb; --accent-2:#06b6d4; --danger:#ef4444; --border:#e5e7eb }
+    :root{ --bg:#fff; --panel:#f8fafc; --muted:#6b7280; --text:#0b1e2e; --accent:#2563eb; --accent-2:#06b6d4; --danger:#ef4444; --border:#e5e7eb }
     *{box-sizing:border-box}
     body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,system-ui,sans-serif}
     .container{max-width:1200px;margin:24px auto;padding:0 16px}
@@ -26,7 +26,10 @@
     .btn-danger{background:var(--danger);color:#fff;border-color:var(--danger)}
     .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:16px}
     .filters{display:flex;gap:10px;align-items:end;flex-wrap:wrap}
-    .filters .field{min-width:220px}
+    .filters .field{min-width:200px}
+    .kpi-row{display:flex;gap:8px;align-items:stretch;overflow:auto;white-space:nowrap;padding:2px}
+    .kpi{background:#fff;border:1px solid var(--border);border-radius:999px;padding:8px 12px;display:flex;gap:6px;align-items:center;font-size:12px}
+    .kpi b{font-size:12px}
     table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden}
     th,td{padding:10px;border-bottom:1px solid var(--border);text-align:left}
     th{background:#f1f5f9}
@@ -35,7 +38,7 @@
     .status-Confirmado{background:#ecfeff;color:#0e7490;border-color:#a5f3fc}
     .status-Reprogramado{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
     .status-Cancelado{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
-    #calendar{background:#fff;border:1px solid var(--border);border-radius:16px;padding:10px}
+    #calendar{background:#fff;border:1px solid var(--border);border-radius:16px;padding:10px;min-height:480px}
     dialog{border:none;border-radius:14px;max-width:720px;width:96%;padding:0}
     .modal{padding:16px}
     .modal header{display:flex;justify-content:space-between;align-items:center;margin:0 0 8px}
@@ -44,8 +47,14 @@
     @media (max-width:720px){.grid-2{grid-template-columns:1fr}}
     label{font-size:12px;color:#334155;display:block;margin-bottom:6px}
     input,select,textarea{width:100%;padding:10px;border-radius:8px}
+    .chart-sm{height:220px;max-height:220px}
+    @media (max-width:720px){.chart-sm{height:200px;max-height:200px}}
     .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
     .muted{color:var(--muted);font-size:12px}
+    .toast{position:fixed;right:16px;bottom:16px;display:none;max-width:420px;background:#111827;color:#fff;border-radius:12px;padding:12px 14px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:1000}
+    .toast.show{display:block}
+    .toast .title{font-weight:700;margin-bottom:4px}
+    .toast .body{font-size:12px;opacity:.9}
   </style>
 </head>
 <body>
@@ -56,23 +65,33 @@
         <div>
           <h1>Plan de Visitas a Clientes</h1>
           <div class="subtitle">Entelgy · Human driven technology · Colombia</div>
-          <div class="muted">Versión conectada a una base de datos gratuita (Supabase Free Tier)</div>
         </div>
       </div>
       <div class="toolbar">
-        <button id="btnNew" class="btn-secondary">➕ Nueva visita</button>
-        <button id="btnExport" class="btn-primary">⬇️ Exportar CSV</button>
-        <button id="btnImport" class="btn-ghost">⬆️ Importar CSV</button>
+        <button id="btnGoDashboard" class="btn-secondary">📊 Dashboard</button>
+        <button id="btnNew" style="display:none">➕ Nueva visita</button>
+        <button id="btnExport" class="btn-primary" style="display:none">⬇️ Exportar CSV</button>
+        <button id="btnImport" class="btn-ghost" style="display:none">⬆️ Importar CSV</button>
         <input type="file" id="fileInput" accept=".csv" style="display:none" />
-        <button id="btnPrint" class="btn-ghost">🖨️ Imprimir</button>
-        <button id="btnClearAll" class="btn-danger">🗑️ Borrar todo</button>
+        <button id="btnPrint" class="btn-ghost" style="display:none">🖨️ Imprimir</button>
+        <!-- Botón Borrar todo desactivado y oculto -->
+        <button id="btnClearAll" class="btn-danger" style="display:none" disabled>🗑️ Borrar todo</button>
       </div>
     </header>
 
-    <section class="card">
+    <!-- Filtros globales (siempre visibles) -->
+    <section class="card" id="globalFiltersSection">
       <div class="filters">
         <div class="field">
-          <label for="filterPM">Filtrar por PM Responsable</label>
+          <label for="filterDesde">Desde</label>
+          <input id="filterDesde" type="date">
+        </div>
+        <div class="field">
+          <label for="filterHasta">Hasta</label>
+          <input id="filterHasta" type="date">
+        </div>
+        <div class="field">
+          <label for="filterPM">PM Responsable</label>
           <select id="filterPM">
             <option value="">Todos</option>
             <option value="luisa.bello@entelgy.com">Luisa Fernanda Bello Vargas</option>
@@ -81,7 +100,12 @@
             <option value="eduar.hernandez@entelgy.com">Eduar Yovani Hernandez Ruiz</option>
             <option value="sarith.penuela@entelgy.com">Sarith Mayerly Peñuela Morales</option>
             <option value="john.lamus@entelgy.com">John David Lamus Cardona</option>
+            <option value="gisela.vela@entelgy.com">Ruth Yisela Vela Leon</option>
           </select>
+        </div>
+        <div class="field">
+          <label for="filterCliente">Cliente</label>
+          <input id="filterCliente" placeholder="Nombre cliente" />
         </div>
         <div class="field">
           <label for="filterEstado">Estado</label>
@@ -94,14 +118,6 @@
           </select>
         </div>
         <div class="field">
-          <label for="filterDesde">Desde</label>
-          <input id="filterDesde" type="date" />
-        </div>
-        <div class="field">
-          <label for="filterHasta">Hasta</label>
-          <input id="filterHasta" type="date" />
-        </div>
-        <div class="field">
           <button id="btnApplyFilters" class="btn-secondary">Aplicar filtros</button>
         </div>
         <div class="field">
@@ -110,11 +126,29 @@
       </div>
     </section>
 
-    <section class="card">
+    <!-- Dashboard (acordeón) -->
+    <section class="card" id="dashboardSection" style="display:none">
+      <h2>Dashboard de Visitas</h2>
+      <div class="kpi-row" id="kpiRow" style="margin-top:8px">
+        <div class="kpi"><b>Total:</b><span id="k_total">—</span></div>
+        <div class="kpi"><b>Confirmadas:</b><span id="k_conf">—</span></div>
+        <div class="kpi"><b>Pendientes:</b><span id="k_pend">—</span></div>
+        <div class="kpi"><b>% Confirmación:</b><span id="k_rate">—</span></div>
+        <div class="kpi"><b>Top Clientes:</b><span id="k_top_clients">—</span></div>
+      </div>
+      <div class="grid grid-2" style="margin-top:10px">
+        <canvas id="chartEstado" class="chart-sm"></canvas>
+        <canvas id="chartCliente" class="chart-sm"></canvas>
+      </div>
+    </section>
+
+    <!-- Calendario -->
+    <section class="card" id="calendarSection">
       <h2>Calendario de Visitas</h2>
       <div id="calendar"></div>
     </section>
 
+    <!-- Listado -->
     <section class="card">
       <h2>Listado de Visitas</h2>
       <table id="visitsTable">
@@ -128,6 +162,7 @@
     </section>
   </div>
 
+  <!-- Modal -->
   <dialog id="visitDialog">
     <form id="visitForm" method="dialog" class="modal">
       <header>
@@ -179,123 +214,184 @@
     </form>
   </dialog>
 
+  <!-- Toast -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="title" id="toastTitle">Aviso</div>
+    <div class="body" id="toastBody">Mensaje</div>
+  </div>
+
   <script>
-    // ========= CONFIGURA AQUÍ TU PROYECTO SUPABASE =========
-    const SUPABASE_URL = "https://dbnlqslrmuqyqptuthem.supabase.co"; // <-- reemplaza
-    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRibmxxc2xybXVxeXFwdHV0aGVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxNDI2NjEsImV4cCI6MjA3NTcxODY2MX0.u7Zx1z4mxMFPIuCh8PNN4_8bwwGTA0NBMjhQ3W6c52U"; // <-- reemplaza
-    const STORAGE_KEY = 'plan_visitas_clientes_v1'; // fallback local
+    // ====== CONFIG Supabase ======
+    const SUPABASE_URL = "https://dbnlqslrmuqyqptuthem.supabase.co"; // conexión directa
+    const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRibmxxc2xybXVxeXFwdHV0aGVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAxNDI2NjEsImV4cCI6MjA3NTcxODY2MX0.u7Zx1z4mxMFPIuCh8PNN4_8bwwGTA0NBMjhQ3W6c52U"; // conexión directa
     const DB_TABLE = 'visits';
+    const STORAGE_KEY = 'plan_visitas_clientes_v1';
+
+    // ====== DOM refs ======
     const visitsBody = document.getElementById('visitsBody');
     const dlg = document.getElementById('visitDialog');
     const form = document.getElementById('visitForm');
-    const dlgClose = document.getElementById('dlgClose');
     const btnNew = document.getElementById('btnNew');
     const btnClearAll = document.getElementById('btnClearAll');
+    const btnSave = document.getElementById('btnSave');
+    const dlgClose = document.getElementById('dlgClose');
+    const btnGoDashboard = document.getElementById('btnGoDashboard');
 
-    // Filtros UI
-    const fPM = document.getElementById('filterPM');
-    const fEstado = document.getElementById('filterEstado');
+    // Filtros visibles
     const fDesde = document.getElementById('filterDesde');
     const fHasta = document.getElementById('filterHasta');
+    const fPM = document.getElementById('filterPM');
+    const fCliente = document.getElementById('filterCliente');
+    const fEstado = document.getElementById('filterEstado');
 
-    // Estado
-    let state = { rows: [], editIndex: null, filters: {pm:'', estado:'', desde:'', hasta:''} };
-    let calendar;
+    // ====== Estado ======
+    let state = { rows: [], editIndex: null, filters: { pm:'', estado:'', desde:'', hasta:'', cliente:'' } };
+    let calendar; let chartEstado, chartCliente;
 
-    // Cliente Supabase
-    const sb = (SUPABASE_URL && SUPABASE_ANON) ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON) : null;
+    // ====== Identificadores estables para eventos ======
+    function ensureClientId(row){
+      if(row && !row.id && !row._cid){
+        const rid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('cid_'+Math.random().toString(36).slice(2)+Date.now());
+        row._cid = 'c_'+rid;
+      }
+      return row;
+    }
+    function uidFor(row){ return row ? (row.id || row._cid) : null; }
 
-    // ===== Utilidades comunes =====
-    function escapeHtml(s){return String(s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;')}
-    function csvEsc(v){ if(v==null) return ''; v=String(v).replaceAll('"','""'); return /[",\n]/.test(v)?`"${v}"`:v; }
-    function parseCSV(text){ const lines=text.split(/\r?\n/).filter(Boolean); const h=lines.shift().split(','); return lines.map(l=>{const vals=l.match(/\"([^\"]*)\"|[^,]+/g).map(s=>s.replace(/^\"|\"$/g,'')); const o={}; h.forEach((k,i)=>o[k]=vals[i]||''); return o;}); }
+    // ====== Cliente Supabase ======
+    const sb = (SUPABASE_URL && /\.supabase\.co/i.test(SUPABASE_URL) && SUPABASE_ANON && SUPABASE_ANON.length>30)
+      ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON)
+      : null;
 
-    // ===== Persistencia local (fallback sin internet/BD) =====
-    function restoreLocal(){ try{ state.rows = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); }catch{ state.rows = []; } }
+    // ====== Utils ======
+    function escapeHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');}
+    function showToast(title, msg){ const t=document.getElementById('toast'); document.getElementById('toastTitle').textContent=title; document.getElementById('toastBody').textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 4200); }
+
+    // ====== Local fallback ======
+    function restoreLocal(){ try{ state.rows = JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); }catch(e){ state.rows = []; } }
     function persistLocal(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.rows)); }
 
-    // ===== Persistencia Supabase =====
+    // ====== DB helpers ======
+    function buildPayload(row){
+      return {
+        id: row.id || undefined,
+        cliente: String(row.cliente||'').trim(),
+        objetivo: row.objetivo ? String(row.objetivo).trim() : null,
+        fecha: String(row.fecha||'').slice(0,10),
+        hora: row.hora ? String(row.hora).slice(0,5) : null,
+        estado: row.estado || 'Pendiente',
+        pm_name: row.pmName ? String(row.pmName).trim() : null,
+        pm_email: row.pmEmail ? String(row.pmEmail).trim() : null
+      };
+    }
+
+    function validateRowForDB(row){
+      const errors=[];
+      if(!row.cliente || !String(row.cliente).trim()) errors.push('cliente es requerido');
+      if(!row.fecha || !/^\d{4}-\d{2}-\d{2}$/.test(row.fecha)) errors.push('fecha válida es requerida (YYYY-MM-DD)');
+      if(!row.estado) errors.push('estado es requerido');
+      return { ok: errors.length===0, errors };
+    }
+
     async function loadFromDB(){
       if(!sb) { restoreLocal(); return; }
       const { data, error } = await sb.from(DB_TABLE)
         .select('*')
         .order('fecha', { ascending:true })
         .order('hora', { ascending:true, nullsFirst:true });
-      if(error){ console.warn('DB load error, usando localStorage', error); restoreLocal(); return; }
-      // Normaliza formato hacia el UI
-      state.rows = (data||[]).map(r=>({
-        id: r.id,
-        cliente: r.cliente,
-        objetivo: r.objetivo,
-        fecha: r.fecha, // YYYY-MM-DD
-        hora: r.hora || '', // HH:MM:SS
-        estado: r.estado,
-        pmName: r.pm_name,
-        pmEmail: r.pm_email
-      }));
-      // Sincroniza un espejo local opcional (lectura)
+      if(error){ console.warn('DB load error, usando localStorage', error); showToast('BD (lectura)', 'No fue posible leer desde Supabase. Se usa almacenamiento local.'); restoreLocal(); return; }
+      state.rows = (data||[]).map(r=>ensureClientId({ id:r.id, cliente:r.cliente, objetivo:r.objetivo, fecha:r.fecha, hora:r.hora||'', estado:r.estado, pmName:r.pm_name, pmEmail:r.pm_email }));
       persistLocal();
     }
 
     async function upsertToDB(row){
-      if(!sb) { return; }
-      const payload = {
-        id: row.id || undefined,
-        cliente: row.cliente,
-        objetivo: row.objetivo || null,
-        fecha: row.fecha,
-        hora: row.hora || null,
-        estado: row.estado,
-        pm_name: row.pmName || null,
-        pm_email: row.pmEmail || null
-      };
-      const { data, error } = await sb.from(DB_TABLE).upsert(payload).select().single();
-      if(error){ console.error('DB upsert error', error); return; }
-      // devuelve id asignado por la BD
-      row.id = data.id;
+      if(!sb) return { ok:false, error:{ message:'Supabase desactivado' } };
+      const payload = buildPayload(row);
+      const v = validateRowForDB(payload);
+      if(!v.ok){
+        const msg='Validación falló: '+v.errors.join(', ');
+        console.warn(msg, payload);
+        showToast('Datos incompletos', msg);
+        return { ok:false, error:{ message: msg } };
+      }
+      try{
+        const { data, error } = await sb.from(DB_TABLE).upsert(payload).select().single();
+        if(error){
+          console.error('DB upsert error', error);
+          let hint = 'Revisa RLS/Policies y columnas requeridas en la tabla.';
+          if(/invalid input value/.test(String(error.message||''))) hint = 'Formato de dato inválido para una columna.';
+          if(/permission denied|RLS/.test(String(error.message||''))) hint = 'Políticas RLS bloquean la escritura. Ajusta RLS o usa service_role (no en frontend).';
+          showToast('BD (escritura)', 'No se pudo guardar en Supabase. '+hint);
+          return { ok:false, error };
+        }
+        row.id = data.id;
+        return { ok:true, data };
+      }catch(ex){
+        console.error('DB upsert ex', ex);
+        showToast('BD (excepción)', 'Fallo al guardar. Revisa conexión y credenciales.');
+        return { ok:false, error: ex };
+      }
     }
 
-    async function deleteAllDB(){
-      if(!sb) { return; }
-      const { error } = await sb.from(DB_TABLE).delete().neq('id', 0); // borra todo
-      if(error){ console.error('DB deleteAll error', error); }
+    // ====== Protección: deleteAllDB desactivado (botón oculto) ======
+    function deleteAllDB(){
+      console.warn('Función deleteAllDB desactivada por seguridad.');
+      showToast('Acción no permitida','El borrado total de registros está deshabilitado.');
     }
 
-    // ===== Filtros y render =====
+    // ====== Filtros ======
+    function applyFiltersFromGlobal(){
+      state.filters.desde   = fDesde.value || '';
+      state.filters.hasta   = fHasta.value || '';
+      state.filters.pm      = fPM.value || '';
+      state.filters.cliente = fCliente.value || '';
+      state.filters.estado  = fEstado.value || '';
+    }
+
     function getFilteredRows(){
-      const {pm, estado, desde, hasta} = state.filters;
-      return state.rows.filter(r => {
-        let ok = true;
+      var pm = state.filters.pm, estado = state.filters.estado, desde = state.filters.desde, hasta = state.filters.hasta, cliente = state.filters.cliente;
+      return state.rows.filter(function(r){
+        var ok = true;
         if(pm) ok = ok && (r.pmEmail === pm);
         if(estado) ok = ok && r.estado === estado;
         if(desde) ok = ok && r.fecha >= desde;
         if(hasta) ok = ok && r.fecha <= hasta;
+        if(cliente) ok = ok && String(r.cliente||'').toLowerCase().indexOf(cliente.toLowerCase()) !== -1;
         return ok;
-      }).sort((a,b)=> (a.fecha + (a.hora||'')) > (b.fecha + (b.hora||'')) ? 1 : -1);
+      }).sort(function(a,b){ return (a.fecha + (a.hora||'')) > (b.fecha + (b.hora||'')) ? 1 : -1; });
     }
 
+    // ====== Render tabla ======
     function renderTable(){
       const rows = getFilteredRows();
       visitsBody.innerHTML='';
-      rows.forEach(r => {
+      rows.forEach(function(r){
         const tr=document.createElement('tr');
-        tr.innerHTML=`<td>${escapeHtml(r.cliente)}</td><td>${r.fecha}</td><td>${(r.hora||'').toString().slice(0,5)}</td><td>${escapeHtml(r.objetivo||'')}</td><td>${escapeHtml(r.pmName||'')}</td><td><span class="badge status-${r.estado}">${r.estado}</span></td>`;
+        tr.innerHTML='<td>'+escapeHtml(r.cliente)+'</td>'+
+                     '<td>'+r.fecha+'</td>'+
+                     '<td>'+String(r.hora||'').slice(0,5)+'</td>'+
+                     '<td>'+escapeHtml(r.objetivo||'')+'</td>'+
+                     '<td>'+escapeHtml(r.pmName||'')+'</td>'+
+                     '<td><span class="badge status-'+r.estado+'">'+r.estado+'</span></td>';
         visitsBody.appendChild(tr);
       });
     }
 
+    // ====== Calendario ======
     function renderCalendar(){
-      const calendarEl=document.getElementById('calendar');
-      calendar=new FullCalendar.Calendar(calendarEl,{
-        initialView:'dayGridMonth',
-        locale:'es',
-        selectable:true,
-        headerToolbar:{left:'prev,next today',center:'title',right:'dayGridMonth,timeGridWeek,timeGridDay'},
-        dateClick: info => openDialog({fecha:info.dateStr}),
-        eventClick: info => {
-          const e = info.event;
-          const idx = Number(e.extendedProps.index);
-          openDialog(state.rows[idx], idx);
+      const el = document.getElementById('calendar');
+      if(!el) return;
+      if(calendar && calendar.destroy) calendar.destroy();
+      calendar = new FullCalendar.Calendar(el, {
+        initialView: 'dayGridMonth',
+        locale: 'es',
+        selectable: true,
+        headerToolbar: { left:'prev,next today', center:'title', right:'dayGridMonth,timeGridWeek,timeGridDay' },
+        dateClick: function(info){ openDialog({ fecha: info.dateStr }); },
+        eventClick: function(info){
+          const uid = info.event.extendedProps && info.event.extendedProps.uid;
+          const idx = state.rows.findIndex(function(x){ return uidFor(x) === uid; });
+          if (idx > -1) { openDialog(state.rows[idx], idx); }
         },
         events: []
       });
@@ -307,145 +403,157 @@
       if(!calendar) return;
       const rows = getFilteredRows();
       calendar.removeAllEvents();
-      rows.forEach((r,idx)=>{
+      rows.forEach(function(r){
+        ensureClientId(r);
+        const uid = uidFor(r);
         calendar.addEvent({
-          title: r.cliente + (r.objetivo? ' - '+r.objetivo:'') + (r.pmName? ' ('+r.pmName+')':''),
-          start: r.fecha + (r.hora? 'T'+r.hora:''),
+          title: r.cliente + (r.objetivo ? ' - ' + r.objetivo : '') + (r.pmName ? ' (' + r.pmName + ')' : ''),
+          start: r.fecha + (r.hora ? 'T' + r.hora : ''),
           allDay: !r.hora,
-          index: idx
+          extendedProps: { uid: uid }
         });
       });
     }
-
     function rerenderCalendar(){ addEventsFromState(); }
 
-    function openDialog(data={}, index=null){
-      state.editIndex = index;
-      document.getElementById('dlgTitle').textContent = index==null ? 'Nueva visita' : 'Editar visita';
-      document.getElementById('cliente').value = data.cliente||'';
-      document.getElementById('objetivo').value = data.objetivo||'';
-      document.getElementById('fecha').value = data.fecha||'';
-      document.getElementById('hora').value = (data.hora||'').toString().slice(0,5);
-      document.getElementById('estado').value = data.estado||'Pendiente';
-      const pmSel = document.getElementById('pm');
-      if(data.pmEmail){ pmSel.value = data.pmEmail; } else { pmSel.selectedIndex = 0; }
-      dlg.showModal();
+    // ====== Dashboard ======
+    async function fetchDashboardData(filters){
+      filters = filters || {};
+      if(sb){
+        let q = sb.from(DB_TABLE).select('cliente,estado,pm_name,pm_email,fecha');
+        if(filters.desde) q=q.gte('fecha',filters.desde);
+        if(filters.hasta) q=q.lte('fecha',filters.hasta);
+        if(filters.pm) q=q.eq('pm_email',filters.pm);
+        if(filters.estado) q=q.eq('estado',filters.estado);
+        if(filters.cliente) q=q.ilike('cliente','%'+filters.cliente+'%');
+        const {data,error}=await q;
+        if(error){ console.warn('DB dash error', error); showToast('BD (dashboard)','No se pudo consultar datos.'); return getFilteredRows(); }
+        return data||[];
+      }
+      return getFilteredRows();
     }
 
+    function computeKPIs(rows){
+      const total=rows.length;
+      const byEstado=rows.reduce(function(a,r){a[r.estado]=(a[r.estado]||0)+1;return a;},{});
+      const conf=byEstado['Confirmado']||0;
+      const pend=byEstado['Pendiente']||0;
+      const rate=total?Math.round(conf*100/total):0;
+      const byCliente=rows.reduce(function(a,r){const k=r.cliente||'(sin cliente)'; a[k]=(a[k]||0)+1; return a;},{});
+      const topClients=Object.entries(byCliente).sort(function(a,b){return b[1]-a[1];}).slice(0,3).map(function(x){return x[0]+' ('+x[1]+')';}).join(', ')||'—';
+      return { total, conf, pend, rate, byEstado, byCliente, topClients };
+    }
+
+    function renderKPIs(k){
+      document.getElementById('k_total').textContent=k.total;
+      document.getElementById('k_conf').textContent=k.conf;
+      document.getElementById('k_pend').textContent=k.pend;
+      document.getElementById('k_rate').textContent=k.rate+'%';
+      document.getElementById('k_top_clients').textContent=k.topClients;
+    }
+
+    function renderCharts(k){
+      const estados=['Pendiente','Confirmado','Reprogramado','Cancelado'];
+      const bgColors=['#fff7ed','#ecfeff','#eff6ff','#fef2f2'];
+      const brColors=['#c2410c','#0e7490','#1d4ed8','#b91c1c'];
+      const dataEstado = estados.map(function(e){ return k.byEstado[e]||0; });
+      if(chartEstado && chartEstado.destroy) chartEstado.destroy();
+      var ctxEstado = document.getElementById('chartEstado');
+      if(!ctxEstado){ console.warn('No se encontró #chartEstado'); return; }
+      chartEstado = new Chart(ctxEstado.getContext('2d'),{
+        type:'bar',
+        data:{ labels:estados, datasets:[{ label:'Visitas', data:dataEstado, backgroundColor:bgColors, borderColor:brColors, borderWidth:1 }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } } }
+      });
+      var cLabels = Object.keys(k.byCliente);
+      var cValues = cLabels.map(function(l){ return k.byCliente[l]; });
+      if(cLabels.length === 0){ cLabels = ['Sin datos']; cValues = [1]; }
+      if(chartCliente && chartCliente.destroy) chartCliente.destroy();
+      var ctxCliente = document.getElementById('chartCliente');
+      if(!ctxCliente){ console.warn('No se encontró #chartCliente'); return; }
+      chartCliente = new Chart(ctxCliente.getContext('2d'),{ type:'doughnut', data:{ labels:cLabels, datasets:[{ label:'Por cliente', data:cValues }] }, options:{ responsive:true, maintainAspectRatio:false } });
+      if(chartCliente && chartCliente.update) chartCliente.update();
+    }
+
+    function ensureChartsSized(){
+      try{ if(chartEstado && chartEstado.resize) chartEstado.resize(); if(chartCliente && chartCliente.resize) chartCliente.resize(); }catch(_){ }
+    }
+
+    async function refreshDashboard(){
+      const filters = { desde:fDesde.value||null, hasta:fHasta.value||null, pm:fPM.value||null, cliente:fCliente.value||'', estado:fEstado.value||null };
+      const data = await fetchDashboardData(filters);
+      const k = computeKPIs(data);
+      renderKPIs(k); renderCharts(k); renderTable(); rerenderCalendar();
+    }
+
+    // ====== Modal ======
+    function openDialog(data, index){
+      data=data||{}; index=(typeof index==='number')?index:null; state.editIndex=index;
+      document.getElementById('dlgTitle').textContent = index==null ? 'Nueva visita' : 'Editar visita';
+      document.getElementById('cliente').value=data.cliente||'';
+      document.getElementById('objetivo').value=data.objetivo||'';
+      document.getElementById('fecha').value=data.fecha||'';
+      document.getElementById('hora').value=String(data.hora||'').slice(0,5);
+      document.getElementById('estado').value=data.estado||'Pendiente';
+      const pmSel=document.getElementById('pm');
+      if(data.pmEmail){ pmSel.value=data.pmEmail; } else { pmSel.selectedIndex=0; }
+      dlg.showModal();
+    }
     function closeDialog(){ dlg.close(); form.reset(); state.editIndex=null; }
 
-    // ===== Eventos UI =====
-    form.addEventListener('submit', async (e)=>{
+    // ====== Eventos UI ======
+    document.getElementById('btnApplyFilters').addEventListener('click', function(e){ e.preventDefault(); applyFiltersFromGlobal(); refreshDashboard(); });
+    document.getElementById('btnClearFilters').addEventListener('click', function(e){ e.preventDefault(); ['filterDesde','filterHasta','filterPM','filterCliente','filterEstado'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.value=''; }}); applyFiltersFromGlobal(); refreshDashboard(); });
+    document.getElementById('btnCancel').addEventListener('click', closeDialog);
+    document.getElementById('dlgClose').addEventListener('click', closeDialog);
+    btnNew.addEventListener('click', function(){ openDialog(); });
+    btnClearAll.addEventListener('click', function(){ deleteAllDB(); });
+
+    function toggleDashboard(){
+      const dash = document.getElementById('dashboardSection');
+      const isOpen = dash.style.display !== 'none';
+      if (isOpen) { dash.style.display = 'none'; }
+      else { dash.style.display = 'block'; refreshDashboard(); setTimeout(ensureChartsSized, 0); }
+      setTimeout(function(){ if(calendar){ calendar.updateSize(); } }, 0);
+    }
+    btnGoDashboard.addEventListener('click', function(){ toggleDashboard(); });
+
+    // ====== Guardar visita ======
+    form.addEventListener('submit', async function(e){
       e.preventDefault();
       const pmSel = document.getElementById('pm');
       const base = state.editIndex==null ? {} : state.rows[state.editIndex];
-      const row = {
-        ...base,
-        cliente: document.getElementById('cliente').value.trim(),
-        objetivo: document.getElementById('objetivo').value.trim(),
-        fecha: document.getElementById('fecha').value,
-        hora: document.getElementById('hora').value,
-        estado: document.getElementById('estado').value,
-        pmName: pmSel.options[pmSel.selectedIndex]?.text || '',
-        pmEmail: pmSel.value || ''
-      };
+      const row = { id: base.id, cliente:String(document.getElementById('cliente').value||'').trim(), objetivo:String(document.getElementById('objetivo').value||'').trim(), fecha:document.getElementById('fecha').value, hora:document.getElementById('hora').value, estado:document.getElementById('estado').value, pmName: pmSel.options[pmSel.selectedIndex] ? pmSel.options[pmSel.selectedIndex].text : '', pmEmail: pmSel.value };
       if(!row.cliente || !row.fecha){ alert('Completa Cliente y Fecha'); return; }
-
-      // Inserta/actualiza en BD
-      await upsertToDB(row);
-
-      // Refleja en memoria y local
+      var d=new Date(); var todayLocal = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      if(row.fecha < todayLocal){ alert('No se permiten visitas en fechas anteriores a hoy.'); return; }
+      const res = await upsertToDB(row);
+      if(!res.ok){ console.warn('Fallo de upsert; se guarda localmente.'); }
+      ensureClientId(row);
       if(state.editIndex==null){ state.rows.push(row); } else { state.rows[state.editIndex]=row; }
-      persistLocal();
-      renderTable(); rerenderCalendar(); closeDialog();
+      persistLocal(); renderTable(); rerenderCalendar(); closeDialog();
     });
 
-    document.getElementById('btnApplyFilters').addEventListener('click', (e)=>{ e.preventDefault();
-      state.filters.pm = fPM.value; state.filters.estado = fEstado.value; state.filters.desde = fDesde.value; state.filters.hasta = fHasta.value; renderTable(); rerenderCalendar(); });
-    document.getElementById('btnClearFilters').addEventListener('click', (e)=>{ e.preventDefault(); fPM.value=''; fEstado.value=''; fDesde.value=''; fHasta.value=''; state.filters={pm:'',estado:'',desde:'',hasta:''}; renderTable(); rerenderCalendar(); });
-    document.getElementById('btnCancel').addEventListener('click', closeDialog);
-    document.getElementById('dlgClose').addEventListener('click', closeDialog);
-    document.getElementById('btnPrint').addEventListener('click', ()=> window.print());
-
-    btnNew.addEventListener('click', ()=> openDialog());
-
-    document.getElementById('btnClearAll').addEventListener('click', async ()=>{
-      if(confirm('¿Eliminar todas las visitas de la base de datos?')){
-        await deleteAllDB();
-        state.rows = []; persistLocal(); renderTable(); rerenderCalendar();
-      }
-    });
-
-    // CSV export/import (a BD)
-    document.getElementById('btnExport').addEventListener('click', ()=>{
-      if(state.rows.length===0){ alert('No hay datos para exportar.'); return; }
-      const headers=['Cliente','Fecha','Hora','Objetivo','PM','PM_Email','Estado'];
-      const lines=[headers.join(',')].concat(state.rows.map(r=>[r.cliente,r.fecha,r.hora||'',r.objetivo||'',r.pmName||'',r.pmEmail||'',r.estado].map(csvEsc).join(',')));
-      const blob=new Blob(["\uFEFF"+lines.join('\n')],{type:'text/csv;charset=utf-8;'});
-      const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='plan_visitas.csv'; a.click(); URL.revokeObjectURL(url);
-    });
-
-    document.getElementById('btnImport').addEventListener('click', ()=> document.getElementById('fileInput').click());
-    document.getElementById('fileInput').addEventListener('change', async (e)=>{
-      const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
-      rd.onload=async ()=>{ try{
-        const rows=parseCSV(rd.result.toString());
-        // Mapea columnas y realiza upsert masivo
-        const mapped = rows.map(r=>({
-          cliente:r.Cliente, fecha:r.Fecha, hora:r.Hora||null, objetivo:r.Objetivo||null,
-          pm_name:r.PM||null, pm_email:r.PM_Email||null, estado:r.Estado||'Pendiente'
-        }));
-        if(sb){
-          const { error } = await sb.from(DB_TABLE).upsert(mapped);
-          if(error) throw error;
-        }
-        await loadFromDB(); renderTable(); rerenderCalendar(); e.target.value='';
-      }catch(err){ alert('No se pudo importar el CSV.'); console.error(err);} };
-      rd.readAsText(f,'utf-8');
-    });
-
-    // ===== Inicio =====
+    // ====== Inicio ======
     (async function init(){
       await loadFromDB();
-      renderTable();
-      renderCalendar();
+      const now=new Date(); const y=now.getFullYear(); const m=now.getMonth();
+      function toISO(d){ return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0,10); }
+      fDesde.value = toISO(new Date(y,m,1));
+      fHasta.value = toISO(new Date(y,m+1,0));
+      var dmin = y+'-'+String(m+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+      var fFecha=document.getElementById('fecha'); if(fFecha){ fFecha.setAttribute('min', dmin); }
+      applyFiltersFromGlobal(); renderTable(); renderCalendar(); setTimeout(function(){ if(calendar){ calendar.updateSize(); } }, 0);
     })();
+
+    // ====== Autotests mínimos ======
+    (function selfTests(){ try{
+      console.assert(!!document.querySelector('#calendarSection h2'),'Debe existir título calendario');
+      console.assert(typeof FullCalendar!=='undefined','FullCalendar cargado');
+      console.assert(typeof Chart!=='undefined','Chart.js cargado');
+      (function(){ var r={cliente:'ACME',fecha:'2025-10-01',estado:'Pendiente'}; var v=validateRowForDB(r); console.assert(v.ok,'Validación debería pasar'); var r2={cliente:'',fecha:'',estado:''}; var v2=validateRowForDB(r2); console.assert(!v2.ok && v2.errors.length>=2,'Validación debería fallar'); })();
+      console.log('[SelfTest] OK');
+    }catch(e){ console.warn('[SelfTest] Problemas:', e); } })();
   </script>
-
-  <!-- ====================
-       INSTRUCCIONES (leer y quitar si deseas)
-       1) Crea cuenta gratuita en https://supabase.com (plan Free)
-       2) Crea un proyecto y copia la URL y la anon key (Project Settings → API)
-       3) En SQL Editor, ejecuta lo siguiente para la tabla y las políticas:
-
-          create table if not exists public.visits (
-            id uuid primary key default gen_random_uuid(),
-            cliente text not null,
-            objetivo text,
-            fecha date not null,
-            hora time,
-            estado text not null default 'Pendiente',
-            pm_name text,
-            pm_email text,
-            created_at timestamptz not null default now()
-          );
-
-          -- Habilita RLS
-          alter table public.visits enable row level security;
-
-          -- Política abierta para demo (lectura/escritura pública con anon)
-          create policy "visits_select_anon" on public.visits for select using (true);
-          create policy "visits_insert_anon" on public.visits for insert with check (true);
-          create policy "visits_update_anon" on public.visits for update using (true) with check (true);
-          create policy "visits_delete_anon" on public.visits for delete using (true);
-
-          -- Si no tienes la extensión pgcrypto para gen_random_uuid():
-          create extension if not exists pgcrypto;
-
-       4) Pega SUPABASE_URL y SUPABASE_ANON en las constantes de arriba y ¡listo!
-
-       Seguridad: Para producción, crea Auth (email/password o SSO) y ajusta las políticas RLS
-       para permitir que todos vean y solo ciertos usuarios editen. Esta demo deja la tabla abierta.
-  ==================== -->
 </body>
 </html>
